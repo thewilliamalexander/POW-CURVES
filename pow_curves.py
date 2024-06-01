@@ -10,7 +10,7 @@ df_kq = pd.read_excel(kq_series)
 
 # To handle NaN Values
 df_kq['Cs,t,u,v'] = pd.to_numeric(df_kq['Cs,t,u,v'], errors='coerce')
-df_kq['Cs,t,u,v'].fillna(0, inplace=True)
+df_kq['Cs,t,u,v'] = df_kq['Cs,t,u,v'].fillna(0)
 
 def thrust(j, P_D, Ae_Ao, z):
     results = []
@@ -20,10 +20,8 @@ def thrust(j, P_D, Ae_Ao, z):
     tn = df_kt['t(P/D)']
     un = df_kt['u(AE/AO)']
     vn = df_kt['v(Z)']
-    for advance in j:
-        sum_results = 0
-        for i in range(len(n)):
-            sum_results += (cn.iloc[i]) * (advance ** sn.iloc[i]) * (P_D ** tn.iloc[i]) * (Ae_Ao ** un.iloc[i]) * (z ** vn.iloc[i])
+    for i in j:
+        sum_results = (cn * i**sn * P_D**tn * Ae_Ao**un * z**vn).sum()
         results.append(sum_results)
     return results
 
@@ -36,11 +34,9 @@ def torque(j, P_D, Ae_Ao, z):
     un = df_kq['u(AE/AO)']
     vn = df_kq['v(Z)']
 
-    for advance in j:
-        sum_results = 0
-        for i in range(len(n)):
-            sum_results += (cn.iloc[i]) * (advance ** sn.iloc[i]) * (P_D ** tn.iloc[i]) * (Ae_Ao ** un.iloc[i]) * (z ** vn.iloc[i])
-        results.append(sum_results)
+    for i in j:
+        sum_results = (cn * i**sn * P_D**tn * Ae_Ao**un * z**vn).sum()
+        results.append(sum_results*10)
     return results
 
 P_D = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4]
@@ -50,30 +46,38 @@ j = np.arange(0.1, 1.1, 0.1)
 
 Ae_Ao = 0.53
 
-# Advanced ratio J
-x_axis = j
+#data output result calculation
+thrust_data = []
+torque_data = []
 
-# THRUST
-ty_axis = thrust(j, P_D[0], Ae_Ao, z)
+#iteration og P_D value
+for pd_value in P_D:
+    x_axis = j
+    ty_axis = thrust(j, pd_value, Ae_Ao, z)
+    qy_axis = torque(j, pd_value, Ae_Ao, z)
 
-# TORQUE
-qy_axis = torque(j, P_D[0], Ae_Ao, z)
+    if x_axis.size > 0 and len(ty_axis) == len(x_axis) and len(qy_axis) == len(x_axis):
+        # Append the data to list
+        thrust_data.append(ty_axis)
+        torque_data.append(qy_axis)
 
-# Print the results for debugging
-print(f"x_axis (j values): {x_axis}")
-print(f"thrust (Thrust results): {ty_axis}")
-print(f"torque (Torque results): {qy_axis}")
+        # Plot
+        plt.plot(x_axis, ty_axis, marker='o', label=f'Thrust (P/D={pd_value})')
+        plt.plot(x_axis, qy_axis, marker='x', label=f'Torque (P/D={pd_value})')
 
-# Ensure the lists are not empty and have the same length
-if x_axis.size > 0 and len(ty_axis) == len(x_axis) and len(qy_axis) == len(x_axis):
-    # Plot
-    plt.plot(x_axis, ty_axis, marker='o', label='Thrust')
-    plt.plot(x_axis, qy_axis, marker='x', label='Torque')
-    plt.title('Thrust and Torque Results vs. Advance Ratio (j)')
-    plt.xlabel('Advance Ratio (j)')
-    plt.ylabel('Results')
-    plt.grid(True)
-    plt.legend()
-    plt.show()
-else:
-    print("Error: x_axis and y_axis are empty or not the same length.")
+#Plotting & Formatting data
+plt.title('Thrust and Torque Results vs. Advance Ratio (j)')
+plt.xlabel('Advance Ratio (j)')
+plt.ylabel('Results')
+plt.grid(True)
+plt.show()
+
+#CONVERT TO EXCEL
+# Create DataFrame for thrust and torque data
+thrust_df = pd.DataFrame(thrust_data, columns=[f'Thrust (P/D={pd_value})' for pd_value in P_D])
+torque_df = pd.DataFrame(torque_data, columns=[f'Torque (P/D={pd_value})' for pd_value in P_D])
+
+# Write DataFrames to Excel file
+with pd.ExcelWriter('thrust_torque_data.xlsx') as writer:
+    thrust_df.to_excel(writer, sheet_name='Thrust')
+    torque_df.to_excel(writer, sheet_name='Torque')
